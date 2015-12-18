@@ -8,6 +8,7 @@
  * Email: majdan.andras@gmail.com
  */
 
+#include <iostream>
 #include <string>
 #include <boost/program_options.hpp>
 #include <jsoncpp/json/json.h>
@@ -22,25 +23,25 @@ namespace po = boost::program_options;
 const string version = "unknown";
 
 class ID
-{	
+{
 	private:
 	unsigned int lastfreeid=0;
-	
+
 	public:
 	map<string, unsigned int> lastfreeidfortype;
-	
+
 	unsigned int get_next_id_for_type(string nodetype)
 	{
 		unsigned int n;
-		
+
 		if(lastfreeidfortype.find(nodetype) == lastfreeidfortype.end())
 			lastfreeidfortype.insert(make_pair(nodetype, 0));
-			
+
 		n = lastfreeidfortype[nodetype];
 		lastfreeidfortype[nodetype] += 1;
 		return n;
 	}
-	
+
 	unsigned int get_next_global_id()
 	{
 		return lastfreeid++;
@@ -51,10 +52,10 @@ void add_parameters(Json::Value &root)
 {
 	struct utsname unamedata;
 	uname(&unamedata);
-	
+
 	root["id"] = unamedata.nodename;
 	root["name"] = string("NFFG-") + string(unamedata.nodename);
-	
+
 	// TODO: real versioning
 	root["version"] = "1.0";
 }
@@ -65,7 +66,7 @@ bool network_sap(hwloc_obj_t node)
 	if(node->type==HWLOC_OBJ_OS_DEVICE)
 	{
 		int num_of_infos = node->infos_count;
-		
+
 		for(int info_i=0; info_i<num_of_infos; info_i++)
 			if(!strcasecmp(node->infos[info_i].name, "address"))
 				return true;
@@ -75,14 +76,14 @@ bool network_sap(hwloc_obj_t node)
 
 // Check if node is required (based on node's type)
 bool required_by_type(hwloc_obj_t node)
-{	
+{
 	hwloc_obj_type_t type = node->type;
-	
+
 	if (type == HWLOC_OBJ_PU)
 		return true;
 	else if (type == HWLOC_OBJ_OS_DEVICE)
 		return network_sap(node);
-	else 
+	else
 		return false;
 }
 
@@ -90,10 +91,10 @@ string get_node_type(hwloc_obj_t obj)
 {
 	char ctype[32];
 	string type;
-	
+
 	hwloc_obj_type_snprintf(ctype, sizeof(ctype), obj, 0);
 	type = string(ctype);
-	
+
 	return type;
 }
 
@@ -101,9 +102,9 @@ string get_node_name(hwloc_obj_t obj, ID &id)
 {
 	if ( network_sap(obj) && obj->name != NULL)
 		return string(obj->name);
-	
+
 	string type = get_node_type(obj);
-	
+
 	if ( (obj->type == HWLOC_OBJ_PU || obj->type == HWLOC_OBJ_CORE ||
 		  obj->type == HWLOC_OBJ_MACHINE) &&
 		  (obj->os_index != (unsigned) -1) )
@@ -121,26 +122,26 @@ NodePorts *add_nodes(
 	Json::Value &node_edges,
 	ID &id,
 	hwloc_topology_t &topology,
-	hwloc_obj_t obj, 
+	hwloc_obj_t obj,
 	int depth)
-{	 
+{
 	auto *allports = new deque<NodePorts*>;
-	
+
 	for (unsigned int i = 0; i < obj->arity; i++) {
 		auto *ports = add_nodes(node_infras, node_saps,
 			node_edges, id, topology, obj->children[i], depth + 1);
 		if (ports != NULL)
 			allports->push_back(ports);
     }
-    
+
     if (!allports->empty() || required_by_type(obj))
     {
 		Json::Value node;
 		Json::Value ports;
-		
+
 		string node_name = get_node_name(obj, id);
 		node["id"] = node["name"] = node_name;
-		
+
 		if (!allports->empty())
 		{
 			for (auto ait = allports->begin(); ait != allports->end(); ait++)
@@ -149,7 +150,7 @@ NodePorts *add_nodes(
 				{
 					Json::Value edge;
 					unsigned int port_gid;
-					
+
 					edge["id"] = id.get_next_global_id();
 					edge["src_node"] = node_name;
 					port_gid = id.get_next_global_id();
@@ -159,19 +160,19 @@ NodePorts *add_nodes(
 					edge["delay"] = 0.1;
 					edge["bandwidth"] = 1000;
 					node_edges.append(edge);
-					
+
 					Json::Value portid;
 					portid["id"] = port_gid;
 					ports.append(portid);
 				}
 			}
 		}
-		
+
 		Json::Value portid;
 		unsigned int port_gid = id.get_next_global_id();
 		portid["id"] = port_gid;
 		ports.append(portid);
-		
+
 		if (network_sap(obj))
 		{
 			Json::Value sap;
@@ -184,8 +185,8 @@ NodePorts *add_nodes(
 			Json::Value node;
 			node["id"] = node["name"] = node_name;
 			node["ports"] = ports;
-			node["domain"] = "INTERNAL";		
-			
+			node["domain"] = "INTERNAL";
+
 			if (obj->type == HWLOC_OBJ_PU)
 			{
 				Json::Value supported;
@@ -213,7 +214,7 @@ NodePorts *add_nodes(
 			}
 			node_infras.append(node);
 		}
-		
+
 		auto *node_ports = new NodePorts;
 		auto *pair_to_push = new pair<unsigned int, string>(port_gid, node_name);
 		node_ports->push_back(pair_to_push);
@@ -226,34 +227,34 @@ NodePorts *add_nodes(
 void add_topology_tree(Json::Value &root)
 {
 	hwloc_topology_t topology;
-	
+
 	// Allocate and initialize topology object.
 	hwloc_topology_init(&topology);
-  
-	// Add PCI devices for detection 
+
+	// Add PCI devices for detection
 	hwloc_topology_set_flags(topology, HWLOC_TOPOLOGY_FLAG_IO_DEVICES);
-  
+
 	// Perform the topology detection.
 	hwloc_topology_load(topology);
-	
+
 	// Add NFFG parameters
 	Json::Value parameters;
 	add_parameters(parameters);
 	root["parameters"] = parameters;
-	
+
 	ID id;
 	Json::Value node_infras, node_saps, node_edges;
-	
+
 	add_nodes(node_infras, node_saps, node_edges,
 		id, topology, hwloc_get_root_obj(topology), 0);
-		
+
 	root["node_saps"] = node_saps;
 	root["node_infras"] = node_infras;
 	root["node_edges"] = node_edges;
 }
 
 int main(int argc, char* argv[])
-{	
+{
 	po::options_description desc("Allowed options");
 	desc.add_options()
 		("help", "Prints help message")
@@ -262,7 +263,7 @@ int main(int argc, char* argv[])
 
 	po::variables_map vm;
 	po::store(po::parse_command_line(argc, argv, desc), vm);
-	po::notify(vm);    
+	po::notify(vm);
 
 	if (vm.count("help")) {
 		cout << desc << endl;
@@ -273,12 +274,12 @@ int main(int argc, char* argv[])
 		cout << "Version " << version << endl;
 		return 0;
 	}
-	
+
 	Json::Value root;
 	add_topology_tree(root);
-	
+
 	Json::StyledWriter writer;
-    string json_string = writer.write(root);
+	string json_string = writer.write(root);
 	cout << json_string;
 	return 0;
 }
