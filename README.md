@@ -22,6 +22,7 @@ apt-get install g++ cmake make libboost-program-options-dev libhwloc-dev libjson
 ```
 cd build
 cmake ../
+make
 ```
 
 ## Run (in build directory)

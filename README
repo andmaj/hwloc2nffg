@@ -23,6 +23,7 @@ Build
 ------
 cd build
 cmake ../
+make
 
 Run (in build directory)
 ------------------------
