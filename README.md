@@ -20,13 +20,13 @@ apt-get install g++ cmake make libboost-program-options-dev libhwloc-dev libjson
 
 ## Build
 ```
-`cd build`
-`cmake ../`
+cd build
+cmake ../
 ```
 
 ## Run (in build directory)
 ```
-`./bin/hwloc2nffg > mynffg.json`
+./bin/hwloc2nffg > mynffg.json
 ```
 
 ## Author
