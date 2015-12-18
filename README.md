@@ -1,13 +1,37 @@
 # hwloc2nffg
-Converts hwloc data (hierarchical map of computing and network elements) to an NFFG representation in JSON format. This data can be processed by an orchestrator. 
 
-Requires a C99 compiler (GCC/CLANG preferred), a make system (GNU Make preferred) and pkgconfig. Hwloc and libjson-c developer packages must be installed. On Debian Jessie they are called libhwloc-dev and libjson-c-dev.
+## Description
+Converts hwloc data (hierarchical map of computing and network elements)
+to an NFFG representation in JSON format. This data can be processed by
+an orchestrator. 
 
-# Compile:
-make
+## Requirements
+* C++11 compiler (G++ preferred)
+* cmake
+* make
+* boost-program-options library
+* hwloc library
+* jsoncpp library
 
-# Run:
-./bin/hwloc2nffg > mynffg.json
+```
+On Debian Jessie you can install them by:
+apt-get install g++ cmake make libboost-program-options-dev libhwloc-dev libjsoncpp-dev
+```
 
+## Build
+```
+`cd build`
+`cmake ../`
+```
+
+## Run (in build directory)
+```
+`./bin/hwloc2nffg > mynffg.json`
+```
+
+## Author
+```
 Written by Andras Majdan.
 Email: majdan.andras@gmail.com
+```
+
