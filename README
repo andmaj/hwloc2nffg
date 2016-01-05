@@ -27,7 +27,7 @@ make
 
 Run (in build directory)
 ------------------------
-./bin/hwloc2nffg > mynffg.json
+./bin/hwloc2nffg > machine.nffg
 
 Author
 -------

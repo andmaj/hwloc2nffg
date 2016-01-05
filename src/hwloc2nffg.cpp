@@ -250,7 +250,7 @@ void add_topology_tree(Json::Value &root)
 
 	root["node_saps"] = node_saps;
 	root["node_infras"] = node_infras;
-	root["node_edges"] = node_edges;
+	root["edge_links"] = node_edges;
 }
 
 int main(int argc, char* argv[])
