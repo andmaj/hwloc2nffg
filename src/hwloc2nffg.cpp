@@ -11,6 +11,7 @@
 #include <iostream>
 #include <string>
 #include <boost/program_options.hpp>
+#include <boost/algorithm/string/replace.hpp>
 #include <jsoncpp/json/json.h>
 #include <hwloc.h>
 #include <sys/utsname.h>
@@ -98,19 +99,28 @@ string get_node_type(hwloc_obj_t obj)
 	return type;
 }
 
+string sanitize(string s)
+{
+	// in-place replace
+	boost::replace_all(s, " ", "_");
+	boost::replace_all(s, "\t", "_");
+	boost::replace_all(s, "\n", "_");
+	return s;
+}
+
 string get_node_name(hwloc_obj_t obj, ID &id)
 {
 	if ( network_sap(obj) && obj->name != NULL)
-		return string(obj->name);
+		return sanitize(string(obj->name));
 
 	string type = get_node_type(obj);
 
 	if ( (obj->type == HWLOC_OBJ_PU || obj->type == HWLOC_OBJ_CORE ||
 		  obj->type == HWLOC_OBJ_MACHINE) &&
 		  (obj->os_index != (unsigned) -1) )
-		return type + "#" + to_string(obj->os_index);
+		return sanitize(type + "#" + to_string(obj->os_index));
 	else
-		return type + "!" + to_string(id.get_next_id_for_type(type));
+		return sanitize(type + "!" + to_string(id.get_next_id_for_type(type)));
 }
 
 typedef deque<pair<unsigned int, string>*> NodePorts;
