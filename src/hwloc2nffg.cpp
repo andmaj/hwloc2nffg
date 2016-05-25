@@ -49,6 +49,11 @@ class ID
 	}
 };
 
+struct OPTIONS
+{
+	bool merge = false;
+};
+
 void add_parameters(Json::Value &root)
 {
 	struct utsname unamedata;
@@ -125,6 +130,17 @@ string get_node_name(hwloc_obj_t obj, ID &id)
 
 typedef deque<pair<unsigned int, string>*> NodePorts;
 
+void merge_with_child(NodePorts *ports, hwloc_obj_t obj)
+{
+	// TODO: merging logic
+
+	// Parent: obj
+	// Child: obj->children[0]
+	// Child's port_gid and node_name in ports
+
+	return;
+}
+
 // Process nodes
 NodePorts *add_nodes(
 	Json::Value &node_infras,
@@ -133,13 +149,23 @@ NodePorts *add_nodes(
 	ID &id,
 	hwloc_topology_t &topology,
 	hwloc_obj_t obj,
-	int depth)
+	int depth,
+	OPTIONS &options)
 {
 	auto *allports = new deque<NodePorts*>;
 
+	// Merge this node in case of one child
+	if (options.merge && obj->arity == 1)
+	{
+		auto *ports = add_nodes(node_infras, node_saps,
+			node_edges, id, topology, obj->children[0], depth + 1, options);
+		merge_with_child(ports, obj);
+		return ports;
+	}
+
 	for (unsigned int i = 0; i < obj->arity; i++) {
 		auto *ports = add_nodes(node_infras, node_saps,
-			node_edges, id, topology, obj->children[i], depth + 1);
+			node_edges, id, topology, obj->children[i], depth + 1, options);
 		if (ports != NULL)
 			allports->push_back(ports);
     }
@@ -234,7 +260,7 @@ NodePorts *add_nodes(
 	return NULL;
 }
 
-void add_topology_tree(Json::Value &root)
+void add_topology_tree(Json::Value &root, OPTIONS &options)
 {
 	hwloc_topology_t topology;
 
@@ -256,7 +282,7 @@ void add_topology_tree(Json::Value &root)
 	Json::Value node_infras, node_saps, node_edges;
 
 	add_nodes(node_infras, node_saps, node_edges,
-		id, topology, hwloc_get_root_obj(topology), 0);
+		id, topology, hwloc_get_root_obj(topology), 0, options);
 
 	root["node_saps"] = node_saps;
 	root["node_infras"] = node_infras;
@@ -265,10 +291,13 @@ void add_topology_tree(Json::Value &root)
 
 int main(int argc, char* argv[])
 {
+	OPTIONS options;
+
 	po::options_description desc("Allowed options");
 	desc.add_options()
 		("help", "Prints help message")
 		("version", "Prints version number")
+		("merge", "Merge nodes which have only one child") 
 	;
 
 	po::variables_map vm;
@@ -285,8 +314,12 @@ int main(int argc, char* argv[])
 		return 0;
 	}
 
+	if (vm.count("merge")) {
+		options.merge = true;
+	}
+
 	Json::Value root;
-	add_topology_tree(root);
+	add_topology_tree(root, options);
 
 	Json::StyledWriter writer;
 	string json_string = writer.write(root);

@@ -26,10 +26,14 @@ make
 ```
 
 ## Run (in build directory)
+* Full graph 
 ```
 ./bin/hwloc2nffg > machine.nffg
 ```
-
+* Merge node in case of one child
+```
+./bin/hwloc2nffg --merge > machine.nffg
+```
 ## Author
 ```
 Written by Andras Majdan.
