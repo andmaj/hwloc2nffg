@@ -16,6 +16,8 @@
 #include <hwloc.h>
 #include <sys/utsname.h>
 
+#include "dpdk-query.hpp"
+
 using namespace std;
 
 namespace po = boost::program_options;
@@ -52,6 +54,7 @@ class ID
 struct OPTIONS
 {
 	bool merge = false;
+	bool dpdk = false;
 };
 
 void add_parameters(Json::Value &root)
@@ -80,8 +83,33 @@ bool network_sap(hwloc_obj_t node)
 	return false;
 }
 
+string busid_from_pcidev(hwloc_obj_t node)
+{
+	char busid[14];
+	snprintf(busid, sizeof(busid), "%04x:%02x:%02x.%01x",
+      node->attr->pcidev.domain, node->attr->pcidev.bus,
+      node->attr->pcidev.dev, node->attr->pcidev.func);
+    return busid;
+}
+
+
+// Check if node is a DPDK sap
+bool dpdk_sap(hwloc_obj_t node, OPTIONS &options)
+{
+	// Check for DPDK include option and also for proper device
+	if (options.dpdk && node->type==HWLOC_OBJ_PCI_DEVICE)
+	{
+		string busid = busid_from_pcidev(node);
+		if (is_dpdk_interface(busid))
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 // Check if node is required (based on node's type)
-bool required_by_type(hwloc_obj_t node)
+bool required_by_type(hwloc_obj_t node, OPTIONS &options)
 {
 	hwloc_obj_type_t type = node->type;
 
@@ -89,6 +117,8 @@ bool required_by_type(hwloc_obj_t node)
 		return true;
 	else if (type == HWLOC_OBJ_OS_DEVICE)
 		return network_sap(node);
+	else if (type == HWLOC_OBJ_PCI_DEVICE)
+		return dpdk_sap(node, options);
 	else
 		return false;
 }
@@ -113,7 +143,7 @@ string sanitize(string s)
 	return s;
 }
 
-string get_node_name(hwloc_obj_t obj, ID &id)
+string get_node_name(hwloc_obj_t obj, ID &id, OPTIONS &options)
 {
 	if ( network_sap(obj) && obj->name != NULL)
 		return sanitize(string(obj->name));
@@ -124,6 +154,8 @@ string get_node_name(hwloc_obj_t obj, ID &id)
 		  obj->type == HWLOC_OBJ_MACHINE) &&
 		  (obj->os_index != (unsigned) -1) )
 		return sanitize(type + "#" + to_string(obj->os_index));
+	else if ( dpdk_sap(obj, options) )
+		return sanitize(busid_from_pcidev(obj));
 	else
 		return sanitize(type + "!" + to_string(id.get_next_id_for_type(type)));
 }
@@ -169,13 +201,31 @@ NodePorts *add_nodes(
 		if (ports != NULL)
 			allports->push_back(ports);
     }
+    
+    // Add phantom port in case of DPDK
+    if (dpdk_sap(obj, options))
+    {
+		unsigned int pgid = id.get_next_global_id();
+		string nname = get_dpdk_interface_name(busid_from_pcidev(obj));
+		auto *nports = new NodePorts;
+		nports->push_back(new pair<unsigned int, string>(pgid, nname));
+		allports->push_back(nports);
+		
+		Json::Value sap;
+		Json::Value ports;
+		ports["id"] = pgid;
+		
+		sap["id"] = sap["name"] = nname;
+		sap["ports"] = ports;
+		node_saps.append(sap);
+	}
 
-    if (!allports->empty() || required_by_type(obj))
+    if (!allports->empty() || required_by_type(obj, options))
     {
 		Json::Value node;
 		Json::Value ports;
 
-		string node_name = get_node_name(obj, id);
+		string node_name = get_node_name(obj, id, options);
 		node["id"] = node["name"] = node_name;
 
 		if (!allports->empty())
@@ -262,13 +312,18 @@ NodePorts *add_nodes(
 
 void add_topology_tree(Json::Value &root, OPTIONS &options)
 {
+	if(options.dpdk)
+	{
+		dpdk_init();
+	}
+	
 	hwloc_topology_t topology;
 
 	// Allocate and initialize topology object.
 	hwloc_topology_init(&topology);
 
 	// Add PCI devices for detection
-	hwloc_topology_set_flags(topology, HWLOC_TOPOLOGY_FLAG_IO_DEVICES);
+	hwloc_topology_set_flags(topology, HWLOC_TOPOLOGY_FLAG_WHOLE_IO);
 
 	// Perform the topology detection.
 	hwloc_topology_load(topology);
@@ -290,7 +345,7 @@ void add_topology_tree(Json::Value &root, OPTIONS &options)
 }
 
 int main(int argc, char* argv[])
-{
+{	
 	OPTIONS options;
 
 	po::options_description desc("Allowed options");
@@ -298,6 +353,7 @@ int main(int argc, char* argv[])
 		("help", "Prints help message")
 		("version", "Prints version number")
 		("merge", "Merge nodes which have only one child") 
+		("dpdk", "Include DPDK interfaces")
 	;
 
 	po::variables_map vm;
@@ -316,6 +372,10 @@ int main(int argc, char* argv[])
 
 	if (vm.count("merge")) {
 		options.merge = true;
+	}
+	
+	if (vm.count("dpdk")) {
+		options.dpdk = true;
 	}
 
 	Json::Value root;

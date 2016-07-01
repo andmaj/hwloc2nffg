@@ -13,11 +13,14 @@ C++11 compiler (G++ preferred)
 cmake
 make
 boost-program-options library
+boost-filesystem library
+boost-regex library
+
 hwloc library
 jsoncpp library
 
 On Debian Jessie you can install them by:
-apt-get install g++ cmake make libboost-program-options-dev libhwloc-dev libjsoncpp-dev
+apt-get install g++ cmake make libboost-program-options-dev libboost-filesystem-dev libboost-regex-dev libhwloc-dev libjsoncpp-dev
 
 Build
 ------
