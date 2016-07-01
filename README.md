@@ -36,6 +36,10 @@ make
 ```
 ./bin/hwloc2nffg --merge > machine.nffg
 ```
+* Include DPDK interfaces
+```
+./bin/hwloc2nffg --dpdk > machine.nffg
+```
 ## Author
 ```
 Written by Andras Majdan.
