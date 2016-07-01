@@ -48,8 +48,7 @@ map<string,string> dpdk_interfaces;
 // Fills DPDK interface map
 void dpdk_init()
 {
-	//fs::path p("/sys/bus/pci/drivers/igb_uio/");
-	fs::path p("/tmp/net/");
+	fs::path p("/sys/bus/pci/drivers/igb_uio/");
 	if (fs::exists(p) && fs::is_directory(p))
 	{
 		vector<string> ifaces;
