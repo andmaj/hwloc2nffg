@@ -201,7 +201,7 @@ NodePorts *add_nodes(
 		if (ports != NULL)
 			allports->push_back(ports);
     }
-    
+
     // Add phantom port in case of DPDK
     if (dpdk_sap(obj, options))
     {
@@ -210,11 +210,13 @@ NodePorts *add_nodes(
 		auto *nports = new NodePorts;
 		nports->push_back(new pair<unsigned int, string>(pgid, nname));
 		allports->push_back(nports);
-		
+
 		Json::Value sap;
 		Json::Value ports;
-		ports["id"] = pgid;
-		
+		Json::Value portsid;
+		portsid["id"] = pgid;
+		ports.append(portsid);
+
 		sap["id"] = sap["name"] = nname;
 		sap["ports"] = ports;
 		node_saps.append(sap);
@@ -316,7 +318,7 @@ void add_topology_tree(Json::Value &root, OPTIONS &options)
 	{
 		dpdk_init();
 	}
-	
+
 	hwloc_topology_t topology;
 
 	// Allocate and initialize topology object.
@@ -345,14 +347,14 @@ void add_topology_tree(Json::Value &root, OPTIONS &options)
 }
 
 int main(int argc, char* argv[])
-{	
+{
 	OPTIONS options;
 
 	po::options_description desc("Allowed options");
 	desc.add_options()
 		("help", "Prints help message")
 		("version", "Prints version number")
-		("merge", "Merge nodes which have only one child") 
+		("merge", "Merge nodes which have only one child")
 		("dpdk", "Include DPDK interfaces")
 	;
 
@@ -373,7 +375,7 @@ int main(int argc, char* argv[])
 	if (vm.count("merge")) {
 		options.merge = true;
 	}
-	
+
 	if (vm.count("dpdk")) {
 		options.dpdk = true;
 	}
