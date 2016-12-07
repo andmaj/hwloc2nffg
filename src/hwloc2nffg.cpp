@@ -12,11 +12,13 @@
 #include <string>
 #include <boost/program_options.hpp>
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 #include <jsoncpp/json/json.h>
 #include <hwloc.h>
 #include <sys/utsname.h>
 
 #include "dpdk-query.hpp"
+#include "interface-query.hpp"
 
 using namespace std;
 
@@ -24,6 +26,9 @@ namespace po = boost::program_options;
 
 // TODO: git versioning
 const string version = "unknown";
+
+const unsigned long INTERFACE_SPEED_DEFAULT = 1001;
+int cpusocket = 0;
 
 class ID
 {
@@ -56,6 +61,30 @@ struct OPTIONS
 	bool merge = false;
 	bool dpdk = false;
 };
+
+string get_link_speed(string dev_name)
+{
+	if (boost::starts_with(dev_name, "eth"))
+	{
+	
+		int res;
+		unsigned long speed;
+	
+		res = get_interface_speed(speed, REQ_SPEED_CONNECTED, dev_name);
+		if(!res)
+		{
+			return to_string(speed);
+		}
+	
+		res = get_interface_speed(speed, REQ_SPEED_MAX, dev_name);
+	
+		if(!res)
+		{
+			return to_string(speed);
+		}
+	}
+	return to_string(INTERFACE_SPEED_DEFAULT);
+}
 
 void add_parameters(Json::Value &root)
 {
@@ -130,7 +159,7 @@ string get_node_type(hwloc_obj_t obj)
 
 	hwloc_obj_type_snprintf(ctype, sizeof(ctype), obj, 0);
 	type = string(ctype);
-
+	
 	return type;
 }
 
@@ -149,11 +178,16 @@ string get_node_name(hwloc_obj_t obj, ID &id, OPTIONS &options)
 		return sanitize(string(obj->name));
 
 	string type = get_node_type(obj);
+	if(!type.compare("Socket")) cpusocket++;
 
 	if ( (obj->type == HWLOC_OBJ_PU || obj->type == HWLOC_OBJ_CORE ||
 		  obj->type == HWLOC_OBJ_MACHINE) &&
 		  (obj->os_index != (unsigned) -1) )
-		return sanitize(type + "#" + to_string(obj->os_index));
+		if(!type.compare("Core"))
+			return sanitize(type + "#" + to_string(obj->os_index) + "#" + 
+				to_string(cpusocket));
+		else
+			return sanitize(type + "#" + to_string(obj->os_index));
 	else if ( dpdk_sap(obj, options) )
 		return sanitize(busid_from_pcidev(obj));
 	else
@@ -246,7 +280,7 @@ NodePorts *add_nodes(
 					edge["dst_node"] = (*pit)->second;
 					edge["dst_port"] = (*pit)->first;
 					edge["delay"] = 0.1;
-					edge["bandwidth"] = 1000;
+					edge["bandwidth"] = get_link_speed((*pit)->second);
 					node_edges.append(edge);
 
 					Json::Value portid;
