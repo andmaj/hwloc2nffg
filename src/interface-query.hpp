@@ -19,3 +19,4 @@ int get_interface_speed(
 	unsigned long &res_speed, int req_speed, std::string dev_name);
 int ethernet_interface(const char *const name, int *const speed);
 int get_max_supported_speed(unsigned int smask);
+int is_network_interface(std::string dev_name);

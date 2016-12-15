@@ -12,6 +12,8 @@
 #include <string.h>
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
+#include <boost/regex.hpp>
+#include <boost/lexical_cast.hpp>
 
 #include <unistd.h>
 #include <sys/socket.h>
@@ -31,6 +33,21 @@ namespace fs = boost::filesystem;
 
 using namespace std; 
 
+int is_network_interface(std::string dev_name)
+{
+	static const boost::regex dev_regex("^[a-zA-Z]+[0-9a-zA-Z]*$");
+	if(boost::regex_match(dev_name, dev_regex))
+	{
+		fs::path p("/sys/class/net/" + dev_name);
+		if(fs::exists(p))
+		{
+			return 1;
+		}
+	}
+	
+	return 0;
+}
+
 // Get interface speed
 //
 // Returns
@@ -40,7 +57,7 @@ int get_interface_speed(
 	unsigned long &res_speed, int req_speed, string dev_name)
 {
 	long long int curr_speed;
-	fs::path p("/sys/class/net/" + dev_name);
+	fs::path p("/sys/class/net/" + dev_name + "/speed");
 	
 	switch(req_speed)
 	{

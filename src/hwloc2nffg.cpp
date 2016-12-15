@@ -28,7 +28,7 @@ namespace po = boost::program_options;
 const string version = "unknown";
 
 const unsigned long INTERFACE_SPEED_DEFAULT = 1001;
-int cpusocket = 0;
+//int cpusocket = 0;
 
 class ID
 {
@@ -64,7 +64,7 @@ struct OPTIONS
 
 string get_link_speed(string dev_name)
 {
-	if (boost::starts_with(dev_name, "eth"))
+	if (is_network_interface(dev_name))
 	{
 	
 		int res;
@@ -178,14 +178,16 @@ string get_node_name(hwloc_obj_t obj, ID &id, OPTIONS &options)
 		return sanitize(string(obj->name));
 
 	string type = get_node_type(obj);
-	if(!type.compare("Socket")) cpusocket++;
+	//if(!type.compare("Socket")) cpusocket++;
 
 	if ( (obj->type == HWLOC_OBJ_PU || obj->type == HWLOC_OBJ_CORE ||
 		  obj->type == HWLOC_OBJ_MACHINE) &&
 		  (obj->os_index != (unsigned) -1) )
 		if(!type.compare("Core"))
-			return sanitize(type + "#" + to_string(obj->os_index) + "#" + 
-				to_string(cpusocket));
+			//return sanitize(type + "#" + to_string(obj->os_index) + "#" + 
+			//	to_string(cpusocket));
+			return sanitize(type + "#" + to_string(obj->os_index) + "!" +
+				to_string(id.get_next_id_for_type(type)));
 		else
 			return sanitize(type + "#" + to_string(obj->os_index));
 	else if ( dpdk_sap(obj, options) )
