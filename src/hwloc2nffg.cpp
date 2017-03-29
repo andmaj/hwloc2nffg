@@ -10,6 +10,8 @@
 
 #include <iostream>
 #include <string>
+#include <algorithm>
+#include <unordered_set>
 #include <boost/program_options.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/algorithm/string/predicate.hpp>
@@ -60,6 +62,7 @@ struct OPTIONS
 {
 	bool merge = false;
 	bool dpdk = false;
+	bool notreported = false;
 };
 
 string get_link_speed(string dev_name)
@@ -348,6 +351,86 @@ NodePorts *add_nodes(
 	return NULL;
 }
 
+void add_not_reported_network_interfaces(
+	Json::Value &node_infras,
+	Json::Value &node_saps,
+	Json::Value &node_edges,
+	ID &id)
+{
+	unordered_set<string> ifaces = get_list_of_interfaces();
+	
+	for (auto i = node_saps.begin(); i != node_saps.end(); ++i)
+	{
+		Json::FastWriter fastWriter;
+		string lookfor = fastWriter.write((*i)["id"]);
+		lookfor.erase(remove(lookfor.begin(), lookfor.end(), '\n'), lookfor.end());
+		lookfor.erase(remove(lookfor.begin(), lookfor.end(), '\"'), lookfor.end());
+		unordered_set<string>::const_iterator got = ifaces.find (lookfor);
+		if (got != ifaces.end())
+		{
+			// It is in the set, have to remove
+			ifaces.erase(lookfor);
+		}
+	}
+	
+	// Now ifaces only contains not reported network interfaces
+	
+	if(ifaces.size()<1)
+		return; 
+	
+	Json::Value nrbus;
+	nrbus["id"] = nrbus["name"] = "NRBUS";
+	nrbus["domain"] = "INTERNAL";
+	nrbus["type"] = "SDN-SWITCH";
+	Json::Value res;
+	res["cpu"] = 0;
+	res["mem"] = 0;
+	res["storage"] = 0;
+	res["delay"] = 0.5;
+	res["bandwidth"]= 1000;
+	nrbus["resources"] = res;
+	
+	Json::Value nrbus_ports;
+		
+	for (auto i = ifaces.begin(); i != ifaces.end(); ++i)
+	{
+		string iface = *i;
+		
+		// Add a SAP
+		unsigned int sap_port_id = id.get_next_global_id();
+		Json::Value sap;
+		Json::Value sap_ports;
+		Json::Value sap_portsid;
+		sap_portsid["id"] = sap_port_id;
+		sap_ports.append(sap_portsid);
+		sap["id"] = sap["name"] = iface;
+		sap["ports"] = sap_ports;
+		node_saps.append(sap);
+		
+		// Add a port to nrbus ports
+		unsigned int nrbus_port_id = id.get_next_global_id();
+		Json::Value nrbus_portsid;
+		nrbus_portsid["id"] = nrbus_port_id;
+		nrbus_ports.append(nrbus_portsid);
+		
+		// Add an edge link
+		Json::Value edge;
+		unsigned int port_gid;
+
+		edge["id"] = id.get_next_global_id();
+		edge["src_node"] = nrbus["id"];
+		edge["src_port"] = nrbus_port_id;
+		edge["dst_node"] = sap["id"];
+		edge["dst_port"] = sap_port_id;
+		edge["delay"] = 0.1;
+		edge["bandwidth"] = get_link_speed(iface);
+		node_edges.append(edge);
+	}
+	
+	nrbus["ports"] = nrbus_ports;
+	node_infras.append(nrbus);
+}
+
 void add_topology_tree(Json::Value &root, OPTIONS &options)
 {
 	if(options.dpdk)
@@ -377,6 +460,13 @@ void add_topology_tree(Json::Value &root, OPTIONS &options)
 	add_nodes(node_infras, node_saps, node_edges,
 		id, topology, hwloc_get_root_obj(topology), 0, options);
 
+	
+	if (options.notreported)
+	{
+		// Include not reported network interfaces
+		add_not_reported_network_interfaces(node_infras, node_saps, node_edges, id);
+	}
+
 	root["node_saps"] = node_saps;
 	root["node_infras"] = node_infras;
 	root["edge_links"] = node_edges;
@@ -392,6 +482,7 @@ int main(int argc, char* argv[])
 		("version", "Prints version number")
 		("merge", "Merge nodes which have only one child")
 		("dpdk", "Include DPDK interfaces")
+		("notreported", "Include not reported network interfaces")
 	;
 
 	po::variables_map vm;
@@ -414,6 +505,10 @@ int main(int argc, char* argv[])
 
 	if (vm.count("dpdk")) {
 		options.dpdk = true;
+	}
+	
+	if (vm.count("notreported")) {
+		options.notreported = true;
 	}
 
 	Json::Value root;

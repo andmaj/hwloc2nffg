@@ -40,6 +40,10 @@ make
 ```
 ./bin/hwloc2nffg --dpdk > machine.nffg
 ```
+* Include not reported network interfaces
+```
+./bin/hwloc2nffg --notreported > machine.nffg
+```
 ## Author
 ```
 Written by Andras Majdan.

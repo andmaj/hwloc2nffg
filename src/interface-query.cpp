@@ -10,6 +10,7 @@
  */
 
 #include <string.h>
+#include <unordered_set>
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
 #include <boost/regex.hpp>
@@ -33,7 +34,51 @@ namespace fs = boost::filesystem;
 
 using namespace std; 
 
-int is_network_interface(std::string dev_name)
+int is_loopback(string dev_name)
+{
+	// A network interface is a loopback if in /sys/class/net/<iface>/flags
+	// IFF_LOOPBACK (1<<3) bit is set.
+	fs::path p("/sys/class/net/" + dev_name + "/flags");
+	if (fs::exists(p) && fs::is_regular_file(p))
+	{
+		int flags = 0;
+		
+		fs::ifstream fin(p);
+		fin >> hex >> flags;
+		fin.close();
+		
+		return flags & IFF_LOOPBACK;
+	}
+	return 0;
+}
+
+// Return list of interfaces except loopback
+unordered_set<string> get_list_of_interfaces()
+{
+	unordered_set<string> ifaces;
+	
+	fs::path p("/sys/class/net/");
+	if (fs::exists(p) && fs::is_directory(p))
+	{	
+		boost::regex pattern("^[a-zA-Z]+[0-9a-zA-Z]*$");
+		for(auto& entry : boost::make_iterator_range(fs::directory_iterator(p), {}))
+		{
+			boost::smatch match;
+			std::string fn = entry.path().filename().string();
+			if (boost::regex_match( fn, match, pattern))
+			{
+				if(!is_loopback(fn)) 
+				{
+					ifaces.insert(fn);
+				}
+			}
+		}
+	}
+	
+	return ifaces;			
+}
+
+int is_network_interface(string dev_name)
 {
 	static const boost::regex dev_regex("^[a-zA-Z]+[0-9a-zA-Z]*$");
 	if(boost::regex_match(dev_name, dev_regex))
