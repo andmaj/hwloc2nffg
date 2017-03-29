@@ -1,9 +1,9 @@
 /* Bandwidth query
  *
- * Query bandwidth of interfaces 
- * 
+ * Query bandwidth of interfaces
+ *
  * Supported interface(s):
- * ethX
+ * all under /sys/class/net
  *
  * Written by Andras Majdan.
  * Email: majdan.andras@gmail.com
@@ -27,12 +27,12 @@
 #include <errno.h>
 #include <stdio.h>
 #include <limits.h>
- 
+
 #include "interface-query.hpp"
 
-namespace fs = boost::filesystem; 
+namespace fs = boost::filesystem;
 
-using namespace std; 
+using namespace std;
 
 int is_loopback(string dev_name)
 {
@@ -42,11 +42,11 @@ int is_loopback(string dev_name)
 	if (fs::exists(p) && fs::is_regular_file(p))
 	{
 		int flags = 0;
-		
+
 		fs::ifstream fin(p);
 		fin >> hex >> flags;
 		fin.close();
-		
+
 		return flags & IFF_LOOPBACK;
 	}
 	return 0;
@@ -56,10 +56,10 @@ int is_loopback(string dev_name)
 unordered_set<string> get_list_of_interfaces()
 {
 	unordered_set<string> ifaces;
-	
+
 	fs::path p("/sys/class/net/");
 	if (fs::exists(p) && fs::is_directory(p))
-	{	
+	{
 		boost::regex pattern("^[a-zA-Z]+[0-9a-zA-Z]*$");
 		for(auto& entry : boost::make_iterator_range(fs::directory_iterator(p), {}))
 		{
@@ -67,15 +67,15 @@ unordered_set<string> get_list_of_interfaces()
 			std::string fn = entry.path().filename().string();
 			if (boost::regex_match( fn, match, pattern))
 			{
-				if(!is_loopback(fn)) 
+				if(!is_loopback(fn))
 				{
 					ifaces.insert(fn);
 				}
 			}
 		}
 	}
-	
-	return ifaces;			
+
+	return ifaces;
 }
 
 int is_network_interface(string dev_name)
@@ -89,7 +89,7 @@ int is_network_interface(string dev_name)
 			return 1;
 		}
 	}
-	
+
 	return 0;
 }
 
@@ -101,37 +101,41 @@ int is_network_interface(string dev_name)
 int get_interface_speed(
 	unsigned long &res_speed, int req_speed, string dev_name)
 {
-	long long int curr_speed;
+	long long int curr_speed = -1;
 	fs::path p("/sys/class/net/" + dev_name + "/speed");
-	
+
 	switch(req_speed)
 	{
 		case REQ_SPEED_CONNECTED:
 			if (fs::exists(p) && fs::is_regular_file(p))
 			{
-				fs::ifstream fin(p);
-				fin >> curr_speed;
-				fin.close();
+				try {
+					fs::ifstream fin(p);
+					fin >> curr_speed;
+					fin.close();
+				} catch (...) {
+					curr_speed = -1;
+				}
 			}
 			break;
-			
+
 		case REQ_SPEED_MAX:
 			int speed;
-			
+
 			if (ethernet_interface(dev_name.c_str(), &speed))
 			{
 				return 1;
 			}
 			curr_speed = speed;
-			
+
 			break;
 	}
-	
+
 	if (curr_speed<0 || curr_speed>INT_MAX)
 	{
 		return 1;
 	}
-	
+
 	res_speed = curr_speed;
 	return 0;
 }
@@ -153,7 +157,7 @@ int ethernet_interface(const char *const name, int *const speed)
     }
 
     if (speed)  *speed = -1;
-    
+
     fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd == -1) {
         const int err = errno;
@@ -176,13 +180,13 @@ int ethernet_interface(const char *const name, int *const speed)
 
 
    /* Connected link speed alternative query
-      
+
       if (speed)
          *speed = ethtool_cmd_speed(&cmd);
     */
-    
+
    unsigned int smask;
-   
+
    smask = cmd.supported;
    *speed = get_max_supported_speed(smask);
 
@@ -193,7 +197,7 @@ int ethernet_interface(const char *const name, int *const speed)
 int get_max_supported_speed(unsigned int smask)
 {
 	int speed = -1;
-	
+
 	if(smask & SUPPORTED_10baseT_Half) speed = 10;
 	if(smask & SUPPORTED_10baseT_Full) speed = 10;
 	if(smask & SUPPORTED_100baseT_Half) speed = 100;
@@ -212,6 +216,6 @@ int get_max_supported_speed(unsigned int smask)
 	if(smask & SUPPORTED_40000baseCR4_Full) speed = 40000;
 	if(smask & SUPPORTED_40000baseSR4_Full) speed = 40000;
 	if(smask & SUPPORTED_40000baseLR4_Full) speed = 40000;
-	
+
 	return speed;
 }
