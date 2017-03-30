@@ -69,18 +69,18 @@ string get_link_speed(string dev_name)
 {
 	if (is_network_interface(dev_name))
 	{
-	
+
 		int res;
 		unsigned long speed;
-	
+
 		res = get_interface_speed(speed, REQ_SPEED_CONNECTED, dev_name);
 		if(!res)
 		{
 			return to_string(speed);
 		}
-	
+
 		res = get_interface_speed(speed, REQ_SPEED_MAX, dev_name);
-	
+
 		if(!res)
 		{
 			return to_string(speed);
@@ -162,7 +162,7 @@ string get_node_type(hwloc_obj_t obj)
 
 	hwloc_obj_type_snprintf(ctype, sizeof(ctype), obj, 0);
 	type = string(ctype);
-	
+
 	return type;
 }
 
@@ -210,6 +210,104 @@ void merge_with_child(NodePorts *ports, hwloc_obj_t obj)
 	// Child's port_gid and node_name in ports
 
 	return;
+}
+
+void add_not_reported_network_interfaces(
+	Json::Value &node_infras,
+	Json::Value &node_saps,
+	Json::Value &node_edges,
+	ID &id,
+	unsigned int root_port_id,
+	string &root_node_name)
+{
+	unordered_set<string> ifaces = get_list_of_interfaces();
+
+	for (auto i = node_saps.begin(); i != node_saps.end(); ++i)
+	{
+		Json::FastWriter fastWriter;
+		string lookfor = fastWriter.write((*i)["id"]);
+		lookfor.erase(remove(lookfor.begin(), lookfor.end(), '\n'), lookfor.end());
+		lookfor.erase(remove(lookfor.begin(), lookfor.end(), '\"'), lookfor.end());
+		unordered_set<string>::const_iterator got = ifaces.find (lookfor);
+		if (got != ifaces.end())
+		{
+			// It is in the set, have to remove
+			ifaces.erase(lookfor);
+		}
+	}
+
+	// Now ifaces only contains not reported network interfaces
+
+	if(ifaces.size()<1)
+		return;
+
+	Json::Value nrbus;
+	nrbus["id"] = nrbus["name"] = "NRBUS";
+	nrbus["domain"] = "INTERNAL";
+	nrbus["type"] = "SDN-SWITCH";
+	Json::Value res;
+	res["cpu"] = 0;
+	res["mem"] = 0;
+	res["storage"] = 0;
+	res["delay"] = 0.5;
+	res["bandwidth"]= 1000;
+	nrbus["resources"] = res;
+
+	Json::Value nrbus_ports;
+
+	for (auto i = ifaces.begin(); i != ifaces.end(); ++i)
+	{
+		string iface = *i;
+
+		// Add a SAP
+		unsigned int sap_port_id = id.get_next_global_id();
+		Json::Value sap;
+		Json::Value sap_ports;
+		Json::Value sap_portsid;
+		sap_portsid["id"] = sap_port_id;
+		sap_ports.append(sap_portsid);
+		sap["id"] = sap["name"] = iface;
+		sap["ports"] = sap_ports;
+		node_saps.append(sap);
+
+		// Add a port to nrbus ports
+		unsigned int nrbus_port_id = id.get_next_global_id();
+		Json::Value nrbus_portsid;
+		nrbus_portsid["id"] = nrbus_port_id;
+		nrbus_ports.append(nrbus_portsid);
+
+		// Add an edge link
+		Json::Value edge;
+		unsigned int port_gid;
+
+		edge["id"] = id.get_next_global_id();
+		edge["src_node"] = nrbus["id"];
+		edge["src_port"] = nrbus_port_id;
+		edge["dst_node"] = sap["id"];
+		edge["dst_port"] = sap_port_id;
+		edge["delay"] = 0.1;
+		edge["bandwidth"] = get_link_speed(iface);
+		node_edges.append(edge);
+	}
+
+	unsigned int nrbus_to_root_port_id = id.get_next_global_id();
+
+	// Add link to root node
+	Json::Value edge;
+        edge["id"] = id.get_next_global_id();
+        edge["src_node"] = root_node_name;
+        edge["src_port"] = root_port_id;
+        edge["dst_node"] = nrbus["id"];
+        edge["dst_port"] = nrbus_to_root_port_id;
+        edge["delay"] = 0.1;
+        edge["bandwidth"] = 1000;
+        node_edges.append(edge);
+	Json::Value nrbus_to_root_port;
+	nrbus_to_root_port["id"] = nrbus_to_root_port_id;
+	nrbus_ports.append(nrbus_to_root_port);
+
+	nrbus["ports"] = nrbus_ports;
+	node_infras.append(nrbus);
 }
 
 // Process nodes
@@ -351,86 +449,6 @@ NodePorts *add_nodes(
 	return NULL;
 }
 
-void add_not_reported_network_interfaces(
-	Json::Value &node_infras,
-	Json::Value &node_saps,
-	Json::Value &node_edges,
-	ID &id)
-{
-	unordered_set<string> ifaces = get_list_of_interfaces();
-	
-	for (auto i = node_saps.begin(); i != node_saps.end(); ++i)
-	{
-		Json::FastWriter fastWriter;
-		string lookfor = fastWriter.write((*i)["id"]);
-		lookfor.erase(remove(lookfor.begin(), lookfor.end(), '\n'), lookfor.end());
-		lookfor.erase(remove(lookfor.begin(), lookfor.end(), '\"'), lookfor.end());
-		unordered_set<string>::const_iterator got = ifaces.find (lookfor);
-		if (got != ifaces.end())
-		{
-			// It is in the set, have to remove
-			ifaces.erase(lookfor);
-		}
-	}
-	
-	// Now ifaces only contains not reported network interfaces
-	
-	if(ifaces.size()<1)
-		return; 
-	
-	Json::Value nrbus;
-	nrbus["id"] = nrbus["name"] = "NRBUS";
-	nrbus["domain"] = "INTERNAL";
-	nrbus["type"] = "SDN-SWITCH";
-	Json::Value res;
-	res["cpu"] = 0;
-	res["mem"] = 0;
-	res["storage"] = 0;
-	res["delay"] = 0.5;
-	res["bandwidth"]= 1000;
-	nrbus["resources"] = res;
-	
-	Json::Value nrbus_ports;
-		
-	for (auto i = ifaces.begin(); i != ifaces.end(); ++i)
-	{
-		string iface = *i;
-		
-		// Add a SAP
-		unsigned int sap_port_id = id.get_next_global_id();
-		Json::Value sap;
-		Json::Value sap_ports;
-		Json::Value sap_portsid;
-		sap_portsid["id"] = sap_port_id;
-		sap_ports.append(sap_portsid);
-		sap["id"] = sap["name"] = iface;
-		sap["ports"] = sap_ports;
-		node_saps.append(sap);
-		
-		// Add a port to nrbus ports
-		unsigned int nrbus_port_id = id.get_next_global_id();
-		Json::Value nrbus_portsid;
-		nrbus_portsid["id"] = nrbus_port_id;
-		nrbus_ports.append(nrbus_portsid);
-		
-		// Add an edge link
-		Json::Value edge;
-		unsigned int port_gid;
-
-		edge["id"] = id.get_next_global_id();
-		edge["src_node"] = nrbus["id"];
-		edge["src_port"] = nrbus_port_id;
-		edge["dst_node"] = sap["id"];
-		edge["dst_port"] = sap_port_id;
-		edge["delay"] = 0.1;
-		edge["bandwidth"] = get_link_speed(iface);
-		node_edges.append(edge);
-	}
-	
-	nrbus["ports"] = nrbus_ports;
-	node_infras.append(nrbus);
-}
-
 void add_topology_tree(Json::Value &root, OPTIONS &options)
 {
 	if(options.dpdk)
@@ -457,14 +475,14 @@ void add_topology_tree(Json::Value &root, OPTIONS &options)
 	ID id;
 	Json::Value node_infras, node_saps, node_edges;
 
-	add_nodes(node_infras, node_saps, node_edges,
+	NodePorts *np = add_nodes(node_infras, node_saps, node_edges,
 		id, topology, hwloc_get_root_obj(topology), 0, options);
 
-	
-	if (options.notreported)
+	if(options.notreported)
 	{
-		// Include not reported network interfaces
-		add_not_reported_network_interfaces(node_infras, node_saps, node_edges, id);
+		add_not_reported_network_interfaces(
+			node_infras, node_saps, node_edges, id,
+			np->front()->first, np->front()->second);
 	}
 
 	root["node_saps"] = node_saps;
@@ -506,7 +524,7 @@ int main(int argc, char* argv[])
 	if (vm.count("dpdk")) {
 		options.dpdk = true;
 	}
-	
+
 	if (vm.count("notreported")) {
 		options.notreported = true;
 	}
